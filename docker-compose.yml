@@ -1,0 +1,150 @@
+version: '2'
+services:
+    autodiscovery:
+        build: ./autodiscovery/
+        mem_limit: 128m
+        expose:
+            - 53
+            - 8300
+            - 8301
+            - 8302
+            - 8400
+            - 8500
+        ports:
+            - 8500:8500
+        dns:
+            - 127.0.0.1
+    avs_nginx:
+        build: ./avs/nginx/
+        volumes:
+            - ../source/avs:/var/www
+            - ./avs/nginx/log:/var/log/nginx
+        links:
+            - autodiscovery
+            - avs_php
+        environment:
+            - BACKEND=avs-php
+            - CONSUL=autodiscovery
+        ports:
+            - "80:80"
+            - "443:443"
+    avs_php:
+        build: ./avs/php/
+        volumes:
+            - ../source/avs:/var/www
+        links:
+            - autodiscovery
+            - avs_mysql
+        expose:
+            - 9000
+        ports:
+            - "9000:9000"
+        environment:
+            - BACKEND=avs-nginx
+            - CONSUL=autodiscovery
+    avs_mysql:
+        build: ./avs/mysql/
+        environment:
+            - CONSUL=autodiscovery
+            - MYSQL_ROOT_PASSWORD=secret
+            - MYSQL_DATABASE=avs
+            - MYSQL_USER=user
+            - MYSQL_PASSWORD=secret
+        ports:
+            - "3306:3306"
+        volumes:
+            - ./avs/mysql/data:/var/lib/mysql
+            - ./avs/mysql/conf:/etc/mysql/conf.d
+    avs_sym_nginx:
+        build: ./avs_sym/nginx/
+        volumes:
+            - ../source/avs_sym:/var/www
+        links:
+            - autodiscovery
+            - avs_sym_php
+        environment:
+            - BACKEND=avs-sym-php
+            - CONSUL=autodiscovery
+        ports:
+            - "8082:80"
+            - "8543:443"
+    avs_sym_php:
+        build: ./avs_sym/php/
+        volumes:
+            - ../source/avs_sym:/var/www
+        links:
+            - autodiscovery
+            - avs_mysql
+        expose:
+            - 9000
+        environment:
+            - BACKEND=avs-sym-nginx
+            - CONSUL=autodiscovery
+    avs_phpmyadmin:
+        image: phpmyadmin/phpmyadmin
+        links:
+            - avs_mysql:db
+        ports:
+            - 8000:80
+        environment:
+            MYSQL_ROOT_PASSWORD: secret
+        depends_on:
+            - avs_mysql
+    shipment_docs_nginx:
+        build: ./shipment_docs/nginx/
+        volumes_from:
+            - source_shipment_docs
+        links:
+            - autodiscovery
+            - shipment_docs_php
+        environment:
+            - BACKEND=shipment-docs-php
+            - CONSUL=autodiscovery
+        ports:
+            - "8081:80"
+            - "8443:443"
+    shipment_docs_php:
+        build: ./shipment_docs/php/
+        volumes_from:
+            - source_shipment_docs
+        links:
+            - autodiscovery
+            - shipment_docs_mysql
+        expose:
+            - 9000
+        environment:
+            - BACKEND=shipment-docs-nginx
+            - CONSUL=autodiscovery
+    shipment_docs_mysql:
+        build: ./shipment_docs/mysql/
+        environment:
+            - CONSUL=autodiscovery
+            - MYSQL_ROOT_PASSWORD=secret
+            - MYSQL_DATABASE=shipment_docs
+            - MYSQL_USER=user
+            - MYSQL_PASSWORD=secret
+        ports:
+            - 6666:3306
+        volumes:
+            - ./shipment_docs/mysql/data:/var/lib/mysql
+            - ./shipment_docs/mysql/conf:/etc/mysql/conf.d
+    source_shipment_docs:
+        image: dracoblue/lsyncd
+        environment:
+            - SOURCES=/mnt/vendor
+            - DESTINATIONS=/var/www/vendor
+            - EXCLUDES=.svn:.git:.docker
+        volumes:
+            - ../source/shipment_docs:/var/www
+            - ../source/shipment_docs/vendor:/mnt/vendor
+            - /var/www/vendor
+    source_avs:
+        image: dracoblue/lsyncd
+        environment:
+            - SOURCES=/mnt/vendor
+            - DESTINATIONS=/var/www/vendor
+            - EXCLUDES=.svn:.git:.docker
+        volumes:
+            - ../source/avs:/var/www
+            - ../source/avs/vendor:/mnt/vendor
+            - /var/www/vendor
